@@ -1,0 +1,3 @@
+verilog_defines -DSYNTH
+read_verilog -sv ../uart.sv ../led_matrix_controller.sv ../top.sv
+synth_ice40 -top top -json proj.json
