@@ -1,5 +1,6 @@
 #!/bin/bash
-yosys -s synth.yosys
+rm proj.json
+yosys -l yosys.log -s synth.yosys
 nextpnr-ice40 \
     --up5k --package sg48 \
     --randomize-seed \

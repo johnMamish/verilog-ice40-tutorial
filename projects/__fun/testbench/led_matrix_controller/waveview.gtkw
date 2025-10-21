@@ -1,0 +1,50 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Wed Oct  1 08:51:46 2025
+[*]
+[dumpfile] "/home/john/projects/verilog_ice40_tutorial/projects/__fun/testbench/led_matrix_controller/dump.vcd"
+[dumpfile_mtime] "Wed Oct  1 08:51:34 2025"
+[dumpfile_size] 23775579
+[savefile] "/home/john/projects/verilog_ice40_tutorial/projects/__fun/testbench/led_matrix_controller/waveview.gtkw"
+[timestart] 38000000
+[size] 2560 1393
+[pos] -1 -1
+*-28.500000 968000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] tb.
+[treeopen] tb.dut.
+[treeopen] tb.dut.mem.
+[sst_width] 297
+[signals_width] 254
+[sst_expanded] 1
+[sst_vpaned_height] 435
+@28
+tb.dut.clk_i
+tb.dut.reset_i
+@200
+-
+@22
+tb.dut.screen_write_x_i[15:0]
+tb.dut.screen_write_y_i[15:0]
+@28
+tb.dut.screen_write_valid_i
+@200
+-
+@22
+tb.dut.mem.screen_write_idx_latch[15:0]
+tb.dut.mem.screen_write_rgb_latch[23:0]
+tb.dut.mem.write_bitplane_idx[7:0]
+tb.dut.mem.buffer_byte_addr0[13:0]
+tb.dut.mem.buffer_byte_addr1[13:0]
+@200
+-
+@28
+tb.dut.led_clk_o
+tb.dut.led_latch_o
+@29
+tb.dut.led_oe_n_o
+@28
+tb.dut.led_r_o[1:0]
+tb.dut.led_g_o[1:0]
+tb.dut.led_b_o[1:0]
+[pattern_trace] 1
+[pattern_trace] 0

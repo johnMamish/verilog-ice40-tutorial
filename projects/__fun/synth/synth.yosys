@@ -1,3 +1,5 @@
 verilog_defines -DSYNTH
-read_verilog -sv ../uart.sv ../led_matrix_controller.sv ../top.sv
-synth_ice40 -top top -json proj.json
+read_verilog -sv ../uart.sv
+read_verilog -sv ../led_matrix_controller.sv
+read_verilog -sv ../top.sv
+synth_ice40 -spram -device u -top top -json proj.json

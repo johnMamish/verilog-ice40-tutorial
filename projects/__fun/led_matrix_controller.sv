@@ -135,7 +135,20 @@ module screen_memory #(
     // one buffer for each of {R,G,B}_{1,2} busses
     // one bitplane for each bit of color depth
     // WIDTH*HEIGHT / 2 / 2 total bytes (each nybble contains one bit for r, g, and b, and one unused bit)
-    logic [7:0] screen_buffer [2] [2] [COLOR_DEPTH] [(PANEL_WIDTH * PANEL_HEIGHT)/2/2];
+    localparam BITPLANE_LENGTH_BYTES = (PANEL_WIDTH * PANEL_HEIGHT)/(2 * 2);
+    localparam BUFFER_SIZE_BYTES = COLOR_DEPTH * BITPLANE_LENGTH_BYTES;
+
+    (* ram_style = "huge" *) reg [7:0] screen_buffer0_low [BUFFER_SIZE_BYTES-1:0];
+    (* ram_style = "huge" *) reg [7:0] screen_buffer0_high [BUFFER_SIZE_BYTES-1:0];
+
+    (* ram_style = "huge" *) reg [7:0] screen_buffer1_low [BUFFER_SIZE_BYTES-1:0];
+    (* ram_style = "huge" *) reg [7:0] screen_buffer1_high [BUFFER_SIZE_BYTES-1:0];
+
+    logic [13:0] buffer_byte_addr0, buffer_byte_addr0_prev;
+    logic [13:0] buffer_byte_addr1, buffer_byte_addr1_prev;
+
+    // in order to make yosys infer a bram, we need to have seperate read registers for each memory
+    logic [7:0] screen_buffer_reg [4];
 
     // we have to have the read and write logic in the same always_ff block because they write to
     // the same memory.
@@ -146,15 +159,51 @@ module screen_memory #(
     logic [1:0] [2:0] [(COLOR_DEPTH-1):0] screen_write_rgb_latch;
     logic [15:0] screen_write_idx_latch;
     always_ff @(posedge clk_i) begin
+        logic [7:0] temp;
+        temp
+          = {
+                1'b0,
+                screen_write_rgb_latch[1][0][write_bitplane_idx],
+                screen_write_rgb_latch[1][1][write_bitplane_idx],
+                screen_write_rgb_latch[1][2][write_bitplane_idx],
+                1'b0,
+                screen_write_rgb_latch[0][0][write_bitplane_idx],
+                screen_write_rgb_latch[0][1][write_bitplane_idx],
+                screen_write_rgb_latch[0][2][write_bitplane_idx]
+        };
+
         active_buffer <= active_buffer_i;
         back_buffer <= ~active_buffer_i;
 
-        ////////////////////////////////////////////////////////////////
-        // read logic
-        if (do_read_i) begin
-            // output new pixel and advance read pointer.
-            rgb_pixel_o[0] <= screen_buffer[active_buffer][0][read_bitplane_i][(read_pointer_i >> 1)][read_pointer_i[0] * 4 +: 3];
-            rgb_pixel_o[1] <= screen_buffer[active_buffer][1][read_bitplane_i][(read_pointer_i >> 1)][read_pointer_i[0] * 4 +: 3];
+        buffer_byte_addr0_prev <= buffer_byte_addr0;
+        buffer_byte_addr1_prev <= buffer_byte_addr1;
+
+        // buffer 0 low
+        if ((active_buffer == 0) && do_read_i) begin
+            screen_buffer_reg[0] <= screen_buffer0_low[buffer_byte_addr0];
+        end else if ((active_buffer == 1) && (write_bitplane_idx != '1) && (target_half_latch == 0)) begin
+            screen_buffer0_low[buffer_byte_addr0] <= temp;
+        end
+
+        // buffer 0 high
+        if ((active_buffer == 0) && do_read_i) begin
+            screen_buffer_reg[1] <= screen_buffer0_high[buffer_byte_addr0];
+        end else if ((active_buffer == 1) && (write_bitplane_idx != '1) && (target_half_latch == 1)) begin
+            screen_buffer0_high[buffer_byte_addr0] <= temp;
+        end
+
+        // buffer 1 low
+        if ((active_buffer == 1) && do_read_i) begin
+            screen_buffer_reg[2] <= screen_buffer1_low[buffer_byte_addr1];
+        end else if ((active_buffer == 0) && (write_bitplane_idx != '1) && (target_half_latch == 0)) begin
+            screen_buffer1_low[buffer_byte_addr1] <= temp;
+        end
+
+        // buffer 1 high
+        if ((active_buffer == 1) && do_read_i) begin
+            screen_buffer_reg[3] <= screen_buffer1_high[buffer_byte_addr1];
+        end else if ((active_buffer == 0) && (write_bitplane_idx != '1) && (target_half_latch == 1)) begin
+            screen_buffer1_high[buffer_byte_addr1] <= temp;
         end
 
         ////////////////////////////////////////////////////////////////
@@ -173,41 +222,57 @@ module screen_memory #(
         end
 
         if (write_bitplane_idx != '1) begin
-            screen_buffer[back_buffer][target_half_latch][write_bitplane_idx][screen_write_idx_latch >> 1]
-              <= {
-                1'b0,
-                screen_write_rgb_latch[1][0][write_bitplane_idx],
-                screen_write_rgb_latch[1][1][write_bitplane_idx],
-                screen_write_rgb_latch[1][2][write_bitplane_idx],
-                1'b0,
-                screen_write_rgb_latch[0][0][write_bitplane_idx],
-                screen_write_rgb_latch[0][1][write_bitplane_idx],
-                screen_write_rgb_latch[0][2][write_bitplane_idx]
-            };
             write_bitplane_idx <= write_bitplane_idx + 1;
             if (write_bitplane_idx == (COLOR_DEPTH - 1)) write_bitplane_idx <= '1;
         end
 
+
         if (reset_i) begin
-            rgb_pixel_o <= 'hx;
             write_bitplane_idx <= '1;
         end
     end
 
+    // calculate read and write addresses.
+    always_comb begin
+        logic [15:0] read_addr;
+        logic [15:0] write_addr;
+
+        read_addr = (read_pointer_i >> 1) + (read_bitplane_i * BITPLANE_LENGTH_BYTES);
+        write_addr = (screen_write_idx_latch >> 1) + (write_bitplane_idx * BITPLANE_LENGTH_BYTES);
+
+        if (active_buffer == 0) begin
+            buffer_byte_addr0 = read_addr;
+            buffer_byte_addr1 = write_addr;
+        end else begin
+            buffer_byte_addr0 = write_addr;
+            buffer_byte_addr1 = read_addr;
+        end
+    end
+
+    // route outputs
+    assign rgb_pixel_o[0] = (active_buffer == 0) ?
+                            screen_buffer_reg[0][buffer_byte_addr0_prev[0] * 4 +: 3] :
+                            screen_buffer_reg[2][buffer_byte_addr1_prev[0] * 4 +: 3];
+    assign rgb_pixel_o[1] = (active_buffer == 0) ?
+                            screen_buffer_reg[1][buffer_byte_addr0_prev[0] * 4 +: 3] :
+                            screen_buffer_reg[3][buffer_byte_addr1_prev[0] * 4 +: 3];
+
 `ifndef SYNTH
     initial begin
-        for (int b = 0; b < 2; b++) begin
-            for (int half = 0; half < 2; half++) begin
-                for (int plane = 0; plane < COLOR_DEPTH; plane++) begin
-                    for (logic[15:0] rowcol = 0; rowcol < (PANEL_WIDTH * PANEL_HEIGHT)/2/2; rowcol++) begin
-                        logic [15:0] rowcol_0;
-                        logic [15:0] rowcol_1;
-                        rowcol_0 = rowcol * 2;
-                        rowcol_1 = rowcol * 2 + 1;
-                        screen_buffer[b][half][plane][rowcol] = {1'b0, rowcol_1[plane], rowcol_1[plane], rowcol_1[plane],
-                                                                 1'b0, rowcol_0[plane], rowcol_0[plane], rowcol_0[plane]};
-                    end
-                end
+        for (int plane = 0; plane < COLOR_DEPTH; plane++) begin
+            for (logic[15:0] rowcol = 0; rowcol < BUFFER_SIZE_BYTES; rowcol++) begin
+                logic [15:0] rowcol_0;
+                logic [15:0] rowcol_1;
+                logic [15:0] temp;
+                rowcol_0 = rowcol * 2;
+                rowcol_1 = rowcol * 2 + 1;
+                temp
+                  = {1'b0, rowcol_1[plane], rowcol_1[plane], rowcol_1[plane],
+                    1'b0, rowcol_0[plane], rowcol_0[plane], rowcol_0[plane]};
+                screen_buffer0_low[rowcol] = temp;
+                screen_buffer0_high[rowcol] = temp;
+                screen_buffer1_low[rowcol] = temp;
+                screen_buffer1_high[rowcol] = temp;
             end
         end
     end
@@ -266,9 +331,9 @@ module led_matrix_controller #(
 
     localparam PIXELS_PER_ROW = (WIDTH * (HEIGHT / (SCAN_RATIO * 2)));
     localparam LATCH_DWELL_TIME = 3;
-    localparam OE_MIN_LENGTH = 64;
+    localparam OE_MIN_LENGTH = 3;
 
-    localparam REPEAT_DISPLAY_COUNT = 2;
+    localparam REPEAT_DISPLAY_COUNT = 36;
 
     ////////////////////////////////////////////////////////////////
     // output state tracking
@@ -317,9 +382,12 @@ module led_matrix_controller #(
         .do_read_i(do_mem_read), .rgb_pixel_o(rgb_pixel)
     );
 
-    assign led_r_o = {rgb_pixel[1][0], rgb_pixel[0][0]};
-    assign led_g_o = {rgb_pixel[1][1], rgb_pixel[0][1]};
-    assign led_b_o = {rgb_pixel[1][2], rgb_pixel[0][2]};
+    assign led_r_o[0] = rgb_pixel[0][0];
+    assign led_g_o[0] = rgb_pixel[0][1];
+    assign led_b_o[0] = rgb_pixel[0][2];
+    assign led_r_o[1] = rgb_pixel[1][0];
+    assign led_g_o[1] = rgb_pixel[1][1];
+    assign led_b_o[1] = rgb_pixel[1][2];
 
     ////////////////////////////////////////////////////////////////
     // Drive output bus
@@ -349,7 +417,7 @@ module led_matrix_controller #(
 
         case (state)
             STATE_DWELL: begin
-                if (state_clk_count >= (oe_dwell_count + 10)) state_next = STATE_TRANSMIT;
+                if (state_clk_count >= (oe_dwell_count + 1)) state_next = STATE_TRANSMIT;
             end
 
             STATE_TRANSMIT: begin

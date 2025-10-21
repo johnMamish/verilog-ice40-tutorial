@@ -9,7 +9,7 @@ set_io --warn-no-port uart_tx_o 6
 # on pmod2 and pmod3 ports
 set_io led_r_o[0] 25 # r1
 set_io led_g_o[0] 23 # g1
-set_io led_b_o[0] 27 # b1
+set_io led_b_o[0] 26 # b1
 set_io led_r_o[1] 31 # r2
 set_io led_g_o[1] 28 # g2
 set_io led_b_o[1] 34 # b2

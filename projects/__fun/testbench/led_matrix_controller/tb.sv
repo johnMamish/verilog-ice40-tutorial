@@ -7,7 +7,7 @@ module tb;
 
     logic reset = 0;
 
-    localparam SCREEN_WIDTH = 32;
+    localparam SCREEN_WIDTH = 3;
     localparam SCREEN_HEIGHT = 32;
 
     logic vsync;
@@ -28,6 +28,7 @@ module tb;
     );
     defparam dut.OUTPUT_CLK_DIV = 2;
     defparam dut.COLOR_DEPTH = 4;
+    defparam dut.SCAN_RATIO = 16;
 
     // write to the screen
     initial begin

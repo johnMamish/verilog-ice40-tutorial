@@ -1,0 +1,3 @@
+verilog_defines -DSYNTH
+read_verilog -sv top.sv
+synth_ice40 -spram -device u -top bram -json proj.json
